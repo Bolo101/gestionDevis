@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Administration — Suivi Garage{% endblock %}
+{% block content %}
+
+<h1>Panneau d'administration</h1>
+<p class="muted">
+  Ajustez ici la marge par défaut, le taux de TVA, les taux de cotisations sociales et les seuils
+  du régime micro-entreprise / auto-entrepreneur. Les valeurs préremplies correspondent à la
+  situation 2026 pour une activité mixte (vente de pièces + prestations de services artisanales) ;
+  vérifiez-les auprès de votre expert-comptable ou de l'URSSAF, ces montants évoluant régulièrement.
+</p>
+
+<section class="card">
+  <h2>Paramètres généraux</h2>
+  <form method="post" action="{{ url_for('admin_parametres') }}" class="settings-form">
+    <div class="settings-group">
+      <h3>Marge et TVA</h3>
+      {% for key in ["marge_defaut_pct", "tva_rate_pct"] %}
+      <div class="setting-row">
+        <label for="{{ key }}">{{ labels[key][0] }}</label>
+        <div class="input-with-unit">
+          <input type="text" id="{{ key }}" name="{{ key }}" value="{{ settings[key] }}">
+          <span>{{ labels[key][1] }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="settings-group">
+      <h3>Taux de cotisations sociales (URSSAF, % du CA encaissé)</h3>
+      {% for key in ["cotisation_vente_pct", "cotisation_service_pct"] %}
+      <div class="setting-row">
+        <label for="{{ key }}">{{ labels[key][0] }}</label>
+        <div class="input-with-unit">
+          <input type="text" id="{{ key }}" name="{{ key }}" value="{{ settings[key] }}">
+          <span>{{ labels[key][1] }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="settings-group">
+      <h3>Seuils de franchise en base de TVA</h3>
+      {% for key in ["seuil_tva_vente_base", "seuil_tva_vente_majore", "seuil_tva_service_base", "seuil_tva_service_majore"] %}
+      <div class="setting-row">
+        <label for="{{ key }}">{{ labels[key][0] }}</label>
+        <div class="input-with-unit">
+          <input type="text" id="{{ key }}" name="{{ key }}" value="{{ settings[key] }}">
+          <span>{{ labels[key][1] }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="settings-group">
+      <h3>Plafonds de chiffre d'affaires micro-entreprise</h3>
+      {% for key in ["plafond_global", "plafond_service"] %}
+      <div class="setting-row">
+        <label for="{{ key }}">{{ labels[key][0] }}</label>
+        <div class="input-with-unit">
+          <input type="text" id="{{ key }}" name="{{ key }}" value="{{ settings[key] }}">
+          <span>{{ labels[key][1] }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <button type="submit" class="btn btn-primary">Enregistrer les paramètres</button>
+  </form>
+
+  <form method="post" action="{{ url_for('admin_reset_defaults') }}" onsubmit="return confirm('Réinitialiser tous les paramètres aux valeurs par défaut 2026 ?');">
+    <button type="submit" class="btn btn-ghost">Réinitialiser aux valeurs par défaut 2026</button>
+  </form>
+</section>
+
+<section class="card danger-card">
+  <h2>Zone sensible</h2>
+
+  <div class="danger-block">
+    <h3>Remettre à zéro le compteur de chiffre d'affaires</h3>
+    <p class="muted">
+      Le compteur de CA ne prendra plus en compte que les chantiers encaissés à partir d'aujourd'hui
+      ({{ reset_date.strftime('%d/%m/%Y') if reset_date.year != 1970 else 'jamais réinitialisé' }} = dernière réinitialisation).
+      L'historique des chantiers n'est pas supprimé.
+    </p>
+    <form method="post" action="{{ url_for('admin_reset_ca') }}" onsubmit="return confirm('Confirmer la remise à zéro du compteur de CA ?');">
+      <label for="confirm_reset">Tapez <strong>RESET</strong> pour confirmer</label>
+      <input type="text" id="confirm_reset" name="confirmation" placeholder="RESET" required>
+      <button type="submit" class="btn btn-warning">Remettre à zéro le CA</button>
+    </form>
+  </div>
+
+  <div class="danger-block">
+    <h3>Purger tous les chantiers</h3>
+    <p class="muted">
+      Supprime définitivement tous les chantiers, pièces et lignes de main d'œuvre de la base de
+      données. Cette action est irréversible.
+    </p>
+    <form method="post" action="{{ url_for('admin_purger') }}" onsubmit="return confirm('Cette action est irréversible. Confirmer la purge complète ?');">
+      <label for="confirm_purge">Tapez <strong>PURGER</strong> pour confirmer</label>
+      <input type="text" id="confirm_purge" name="confirmation" placeholder="PURGER" required>
+      <button type="submit" class="btn btn-danger">Purger tous les chantiers</button>
+    </form>
+  </div>
+</section>
+
+{% endblock %}

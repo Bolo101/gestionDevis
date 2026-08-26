@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Nouveau chantier{% endblock %}
+{% block content %}
+<section class="card form-card">
+  <h1>Nouveau chantier</h1>
+  <form method="post" action="{{ url_for('chantier_nouveau') }}">
+    <label for="nom">Nom du chantier</label>
+    <input type="text" id="nom" name="nom" placeholder="Ex : Vidange + freins - Peugeot 208" required>
+
+    <label for="client">Client (optionnel)</label>
+    <input type="text" id="client" name="client" placeholder="Nom du client">
+
+    <button type="submit" class="btn btn-primary">Créer le chantier</button>
+    <a class="btn btn-ghost" href="{{ url_for('index') }}">Annuler</a>
+  </form>
+</section>
+{% endblock %}

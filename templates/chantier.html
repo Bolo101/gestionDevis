@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ chantier.nom }} — Chantier{% endblock %}
+{% block content %}
+
+<div class="chantier-header">
+  <div>
+    <h1>{{ chantier.nom }}</h1>
+    <p class="muted">
+      Client : {{ chantier.client or '—' }} · Créé le {{ chantier.date_creation }}
+      {% if chantier.date_encaissement %} · Encaissé le {{ chantier.date_encaissement }}{% endif %}
+    </p>
+  </div>
+  <form method="post" action="{{ url_for('chantier_statut', chantier_id=chantier.id) }}" class="statut-form">
+    <label for="statut">Statut</label>
+    <select id="statut" name="statut" onchange="this.form.submit()">
+      {% for s in statuts %}
+        <option value="{{ s }}" {{ 'selected' if s == chantier.statut else '' }}>{{ statut_labels[s] }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<section class="totals-card">
+  <div class="stat">
+    <div class="stat-label">Total pièces (achat)</div>
+    <div class="stat-value">{{ totals.total_pieces_achat | euros }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Total pièces (facturé)</div>
+    <div class="stat-value">{{ totals.total_pieces_facture | euros }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Marge brute pièces</div>
+    <div class="stat-value stat-good">{{ totals.marge_brute | euros }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Main d'œuvre</div>
+    <div class="stat-value">{{ totals.total_mo | euros }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Total HT</div>
+    <div class="stat-value">{{ totals.total_ht | euros }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">TVA ({{ totals.tva_rate }} %)</div>
+    <div class="stat-value">{{ totals.tva_montant | euros }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Total TTC</div>
+    <div class="stat-value stat-highlight">{{ totals.total_ttc | euros }}</div>
+  </div>
+</section>
+
+<section class="two-col">
+  <div class="card">
+    <h2>Pièces</h2>
+    {% if totals.pieces|length == 0 %}
+      <p class="empty">Aucune pièce ajoutée.</p>
+    {% else %}
+      <table class="table small">
+        <thead>
+          <tr><th>Pièce</th><th>Achat</th><th>Marge</th><th>Facturé</th><th></th></tr>
+        </thead>
+        <tbody>
+        {% for p in totals.pieces %}
+          <tr>
+            <td>{{ p.nom }}</td>
+            <td>{{ p.prix_achat | euros }}</td>
+            <td>{{ p.marge_pct | pct }}</td>
+            <td>{{ p.prix_facture | euros }}</td>
+            <td>
+              <form method="post" action="{{ url_for('piece_supprimer', piece_id=p.id) }}" onsubmit="return confirm('Supprimer cette pièce ?');">
+                <button type="submit" class="btn btn-small btn-danger">Suppr.</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    <h3>Ajouter une pièce</h3>
+    <form method="post" action="{{ url_for('piece_ajouter', chantier_id=chantier.id) }}" class="inline-form">
+      <label for="p_nom">Nom de la pièce</label>
+      <input type="text" id="p_nom" name="nom" placeholder="Ex : Plaquettes de frein" required>
+
+      <label for="p_achat">Prix d'achat (€ HT)</label>
+      <input type="text" id="p_achat" name="prix_achat" placeholder="Ex : 45.00" required>
+
+      <label for="p_marge">Marge (%) — laisser vide pour utiliser la marge par défaut ({{ settings.marge_defaut_pct }} %)</label>
+      <input type="text" id="p_marge" name="marge_pct" placeholder="Ex : 30">
+
+      <label for="p_facture">Prix facturé (€ HT) — laisser vide pour calcul automatique (achat + marge)</label>
+      <input type="text" id="p_facture" name="prix_facture" placeholder="Calcul automatique si vide">
+
+      <button type="submit" class="btn btn-primary">Ajouter la pièce</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Main d'œuvre</h2>
+    {% if totals.mo|length == 0 %}
+      <p class="empty">Aucune main d'œuvre ajoutée.</p>
+    {% else %}
+      <table class="table small">
+        <thead>
+          <tr><th>Description</th><th>Heures</th><th>Taux</th><th>Montant</th><th></th></tr>
+        </thead>
+        <tbody>
+        {% for m in totals.mo %}
+          <tr>
+            <td>{{ m.description or '—' }}</td>
+            <td>{{ m.heures }}</td>
+            <td>{{ m.taux_horaire | euros }}/h</td>
+            <td>{{ m.montant | euros }}</td>
+            <td>
+              <form method="post" action="{{ url_for('mo_supprimer', mo_id=m.id) }}" onsubmit="return confirm('Supprimer cette ligne ?');">
+                <button type="submit" class="btn btn-small btn-danger">Suppr.</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    <h3>Ajouter de la main d'œuvre</h3>
+    <form method="post" action="{{ url_for('mo_ajouter', chantier_id=chantier.id) }}" class="inline-form">
+      <label for="mo_desc">Description</label>
+      <input type="text" id="mo_desc" name="description" placeholder="Ex : Dépose/repose moteur">
+
+      <label for="mo_heures">Heures</label>
+      <input type="text" id="mo_heures" name="heures" placeholder="Ex : 2.5" required>
+
+      <label for="mo_taux">Taux horaire (€ HT/h)</label>
+      <input type="text" id="mo_taux" name="taux_horaire" placeholder="Ex : 55" required>
+
+      <label for="mo_montant">Montant total (€ HT) — laisser vide pour calcul automatique (heures × taux)</label>
+      <input type="text" id="mo_montant" name="montant" placeholder="Calcul automatique si vide">
+
+      <button type="submit" class="btn btn-primary">Ajouter la main d'œuvre</button>
+    </form>
+  </div>
+</section>
+
+<section class="danger-zone">
+  <form method="post" action="{{ url_for('chantier_supprimer', chantier_id=chantier.id) }}" onsubmit="return confirm('Supprimer définitivement ce chantier ?');">
+    <button type="submit" class="btn btn-danger">Supprimer ce chantier</button>
+  </form>
+  <a class="btn btn-ghost" href="{{ url_for('index') }}">← Retour au tableau de bord</a>
+</section>
+
+{% endblock %}

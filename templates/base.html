@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Suivi Garage{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="{{ url_for('index') }}">🔧 Suivi Garage</a>
+  <nav>
+    <a href="{{ url_for('index') }}">Tableau de bord</a>
+    <a href="{{ url_for('chantier_nouveau') }}">+ Nouveau chantier</a>
+    <a href="{{ url_for('admin') }}">Administration</a>
+  </nav>
+</header>
+
+<main class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-wrap">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+  Outil de suivi interne — les seuils fiscaux/sociaux affichés sont indicatifs et modifiables dans
+  l'administration ; vérifiez-les auprès de votre expert-comptable ou de l'URSSAF.
+</footer>
+</body>
+</html>

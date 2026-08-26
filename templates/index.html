@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord — Suivi Garage{% endblock %}
+{% block content %}
+
+<section class="tracker-card">
+  <div class="tracker-header">
+    <h1>Suivi du chiffre d'affaires {{ tracker.year }}</h1>
+    <span class="badge">CA encaissé depuis le {{ tracker.reset_date.strftime('%d/%m/%Y') }}</span>
+  </div>
+
+  <div class="tracker-grid">
+    <div class="stat">
+      <div class="stat-label">CA total encaissé</div>
+      <div class="stat-value">{{ tracker.ca_total | euros }}</div>
+      <div class="stat-sub">Pièces : {{ tracker.ca_pieces | euros }} · Main d'œuvre : {{ tracker.ca_service | euros }}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Cotisations sociales estimées</div>
+      <div class="stat-value stat-warn">{{ tracker.cotisations_total | euros }}</div>
+      <div class="stat-sub">Soit {{ tracker.part_cotisations_pct | pct }} du CA encaissé</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Net après cotisations (estimatif)</div>
+      <div class="stat-value stat-good">{{ tracker.net_apres_cotisations | euros }}</div>
+      <div class="stat-sub">Hors impôt sur le revenu</div>
+    </div>
+  </div>
+
+  <h2 class="section-title">Position par rapport aux seuils</h2>
+  <div class="seuils-grid">
+
+    <div class="seuil-block">
+      <div class="seuil-title">Franchise TVA — Vente de pièces</div>
+      {% set s1 = tracker.seuils.tva_vente_base %}
+      {% set s2 = tracker.seuils.tva_vente_majore %}
+      <div class="seuil-row">
+        <span>Seuil de base : {{ s1.seuil | euros }}</span>
+        <div class="bar"><div class="bar-fill {{ 'bar-danger' if s1.depasse else 'bar-ok' }}" style="width: {{ s1.pct }}%;"></div></div>
+        <span class="seuil-pct">{{ s1.pct | pct }}</span>
+      </div>
+      <div class="seuil-row">
+        <span>Seuil majoré : {{ s2.seuil | euros }}</span>
+        <div class="bar"><div class="bar-fill {{ 'bar-danger' if s2.depasse else 'bar-ok' }}" style="width: {{ s2.pct }}%;"></div></div>
+        <span class="seuil-pct">{{ s2.pct | pct }}</span>
+      </div>
+      {% if s1.depasse %}<p class="warning">⚠️ Seuil de base dépassé : TVA due dès le mois suivant.</p>{% endif %}
+      {% if s2.depasse %}<p class="warning">🚨 Seuil majoré dépassé : TVA due immédiatement.</p>{% endif %}
+    </div>
+
+    <div class="seuil-block">
+      <div class="seuil-title">Franchise TVA — Main d'œuvre / services</div>
+      {% set s3 = tracker.seuils.tva_service_base %}
+      {% set s4 = tracker.seuils.tva_service_majore %}
+      <div class="seuil-row">
+        <span>Seuil de base : {{ s3.seuil | euros }}</span>
+        <div class="bar"><div class="bar-fill {{ 'bar-danger' if s3.depasse else 'bar-ok' }}" style="width: {{ s3.pct }}%;"></div></div>
+        <span class="seuil-pct">{{ s3.pct | pct }}</span>
+      </div>
+      <div class="seuil-row">
+        <span>Seuil majoré : {{ s4.seuil | euros }}</span>
+        <div class="bar"><div class="bar-fill {{ 'bar-danger' if s4.depasse else 'bar-ok' }}" style="width: {{ s4.pct }}%;"></div></div>
+        <span class="seuil-pct">{{ s4.pct | pct }}</span>
+      </div>
+      {% if s3.depasse %}<p class="warning">⚠️ Seuil de base dépassé : TVA due dès le mois suivant.</p>{% endif %}
+      {% if s4.depasse %}<p class="warning">🚨 Seuil majoré dépassé : TVA due immédiatement.</p>{% endif %}
+    </div>
+
+    <div class="seuil-block">
+      <div class="seuil-title">Plafond micro-entreprise — Global</div>
+      {% set s5 = tracker.seuils.plafond_global %}
+      <div class="seuil-row">
+        <span>Plafond : {{ s5.seuil | euros }}</span>
+        <div class="bar"><div class="bar-fill {{ 'bar-danger' if s5.depasse else 'bar-ok' }}" style="width: {{ s5.pct }}%;"></div></div>
+        <span class="seuil-pct">{{ s5.pct | pct }}</span>
+      </div>
+      {% if s5.depasse %}<p class="warning">🚨 Plafond global dépassé : sortie du régime micro à surveiller.</p>{% endif %}
+    </div>
+
+    <div class="seuil-block">
+      <div class="seuil-title">Plafond micro-entreprise — dont Services</div>
+      {% set s6 = tracker.seuils.plafond_service %}
+      <div class="seuil-row">
+        <span>Plafond : {{ s6.seuil | euros }}</span>
+        <div class="bar"><div class="bar-fill {{ 'bar-danger' if s6.depasse else 'bar-ok' }}" style="width: {{ s6.pct }}%;"></div></div>
+        <span class="seuil-pct">{{ s6.pct | pct }}</span>
+      </div>
+      {% if s6.depasse %}<p class="warning">🚨 Plafond services dépassé.</p>{% endif %}
+    </div>
+
+  </div>
+</section>
+
+<section class="chantiers-section">
+  <div class="section-header">
+    <h2>Chantiers</h2>
+    <a class="btn btn-primary" href="{{ url_for('chantier_nouveau') }}">+ Nouveau chantier</a>
+  </div>
+
+  {% if chantiers_data|length == 0 %}
+    <p class="empty">Aucun chantier pour le moment. Créez votre premier chantier pour commencer le suivi.</p>
+  {% else %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Chantier</th>
+        <th>Client</th>
+        <th>Date</th>
+        <th>Statut</th>
+        <th>Total HT</th>
+        <th>Total TTC</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in chantiers_data %}
+      <tr>
+        <td><a href="{{ url_for('chantier_detail', chantier_id=item.chantier.id) }}">{{ item.chantier.nom }}</a></td>
+        <td>{{ item.chantier.client or '—' }}</td>
+        <td>{{ item.chantier.date_creation }}</td>
+        <td><span class="statut statut-{{ item.chantier.statut }}">{{ statut_labels[item.chantier.statut] }}</span></td>
+        <td>{{ item.totals.total_ht | euros }}</td>
+        <td>{{ item.totals.total_ttc | euros }}</td>
+        <td><a class="btn btn-small" href="{{ url_for('chantier_detail', chantier_id=item.chantier.id) }}">Ouvrir</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+{% endblock %}
