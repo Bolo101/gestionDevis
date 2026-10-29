@@ -1,0 +1,12 @@
+services:
+  gestiondevis:
+    build: .
+    container_name: gestiondevis
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./data:/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATA_DIR=/data
+    restart: unless-stopped
