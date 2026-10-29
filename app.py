@@ -18,17 +18,18 @@ Application locale (Flask + SQLite) permettant à un garagiste de :
 Lancement :
     pip install -r requirements.txt
     python app.py
-Puis ouvrir : http://127.0.0.1:5000
+Puis ouvrir : http://127.0.0.1:5001
 """
 
 import sqlite3
 from datetime import datetime, date
 from pathlib import Path
+import os
 
 from flask import Flask, render_template, request, redirect, url_for, flash, g
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "garage.db"
+DB_PATH = Path(os.environ.get("DATA_DIR", BASE_DIR)) / "garage.db"
 
 app = Flask(__name__)
 app.secret_key = "change-moi-en-production"  # utilisé uniquement pour les messages flash
@@ -607,4 +608,6 @@ def pct_filter(value):
 
 if __name__ == "__main__":
     init_db()
-    app.run(debug=True, host="127.0.0.1", port=5000)
+    app.run(debug=True, host="127.0.0.1", port=5001)
+
+init_db()
