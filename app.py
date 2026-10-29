@@ -5,14 +5,14 @@ Suivi de chiffre d'affaires - Garage / Auto-entrepreneur
 Application locale (Flask + SQLite) permettant à un garagiste de :
 - créer des chantiers (interventions),
 - saisir les pièces (prix d'achat + marge -> prix facturé),
-- saisir la main d'œuvre,
+- saisir la main d'œuvre (heures + taux manuel ou prédéfini),
 - calculer le total HT / TTC de chaque chantier,
 - suivre le chiffre d'affaires encaissé dans l'année,
 - anticiper les seuils du régime micro-entreprise / auto-entrepreneur
   (franchise en base de TVA, plafonds de CA) et visualiser la part
   de CA prélevée par les cotisations sociales,
-- ajuster tous les paramètres (marge, TVA, seuils, taux de cotisations)
-  depuis un panneau d'administration,
+- ajuster tous les paramètres (marge, TVA, seuils, taux de cotisations,
+  taux horaires prédéfinis) depuis un panneau d'administration,
 - purger les chantiers et remettre à zéro le compteur de CA.
 
 Lancement :
@@ -36,10 +36,6 @@ app.secret_key = "change-moi-en-production"  # utilisé uniquement pour les mess
 
 # ---------------------------------------------------------------------------
 # Valeurs par défaut des paramètres (France, régime micro-entreprise, 2026)
-# Sources vérifiées en ligne (URSSAF / service-public / presse spécialisée
-# auto-entrepreneur, situation 2026). Ces montants évoluent régulièrement :
-# vérifiez-les auprès de votre expert-comptable ou de l'URSSAF et ajustez-les
-# à tout moment depuis le panneau d'administration.
 # ---------------------------------------------------------------------------
 DEFAULT_SETTINGS = {
     # Marge par défaut appliquée au prix d'achat des pièces (%)
@@ -48,20 +44,25 @@ DEFAULT_SETTINGS = {
     "tva_rate_pct": 20.0,
 
     # Taux de cotisations sociales URSSAF (% du CA encaissé, régime micro)
-    "cotisation_vente_pct": 12.3,   # achat/revente de pièces (BIC vente de marchandises)
-    "cotisation_service_pct": 21.2,  # prestations de services artisanales (main d'œuvre)
+    "cotisation_vente_pct": 12.3,   # achat/revente de pièces
+    "cotisation_service_pct": 21.2,  # prestations de services artisanales
 
-    # Seuils de franchise en base de TVA (activité mixte : vente + services)
+    # Seuils de franchise en base de TVA
     "seuil_tva_vente_base": 91900.0,
     "seuil_tva_vente_majore": 101000.0,
     "seuil_tva_service_base": 36800.0,
     "seuil_tva_service_majore": 39100.0,
 
-    # Plafonds de chiffre d'affaires du régime micro-entreprise (activité mixte)
-    "plafond_global": 188700.0,   # CA total (vente + services)
-    "plafond_service": 77700.0,   # dont part "services" (main d'œuvre)
+    # Plafonds de chiffre d'affaires du régime micro-entreprise
+    "plafond_global": 188700.0,
+    "plafond_service": 77700.0,
 
-    # Date de référence pour la remise à zéro du compteur de CA (ISO)
+    # Taux horaires prédéfinis (€/h)
+    "mo_taux_1": 45.0,
+    "mo_taux_2": 55.0,
+    "mo_taux_3": 65.0,
+
+    # Date de référence pour la remise à zéro du compteur de CA
     "ca_reset_date": "1970-01-01",
 }
 
@@ -76,6 +77,9 @@ SETTINGS_LABELS = {
     "seuil_tva_service_majore": ("Seuil franchise TVA (majoré) - services / main d'œuvre", "€"),
     "plafond_global": ("Plafond de CA micro-entreprise (global)", "€"),
     "plafond_service": ("Plafond de CA micro-entreprise (dont services)", "€"),
+    "mo_taux_1": ("Taux horaire prédéfini n°1", "€/h"),
+    "mo_taux_2": ("Taux horaire prédéfini n°2", "€/h"),
+    "mo_taux_3": ("Taux horaire prédéfini n°3", "€/h"),
 }
 
 STATUTS = ["brouillon", "facture", "encaisse"]
@@ -147,13 +151,9 @@ def init_db():
 
 
 def get_settings():
-    """Renvoie les paramètres sous forme de dict {key: float}, sauf ca_reset_date (str)."""
     db = get_db()
     rows = db.execute("SELECT key, value FROM settings").fetchall()
-    settings = {row["key"]: row["value"] for row in rows}
-    # ca_reset_date est stocké comme un nombre de jours depuis epoch pour rester REAL ;
-    # on le garde ici en texte ISO stocké séparément pour plus de simplicité de lecture.
-    return settings
+    return {row["key"]: row["value"] for row in rows}
 
 
 def get_ca_reset_date():
@@ -212,9 +212,6 @@ def compute_chantier_totals(chantier_id):
 
 
 def compute_ca_tracker(year=None):
-    """Calcule le CA encaissé (statut = 'encaisse') sur l'année donnée,
-    en distinguant la part 'vente de pièces' et la part 'services / main d'œuvre',
-    et compare aux seuils en vigueur."""
     db = get_db()
     settings = get_settings()
     if year is None:
@@ -460,20 +457,33 @@ def piece_supprimer(piece_id):
 
 
 # ---------------------------------------------------------------------------
-# Routes - Main d'œuvre
+# Routes - Main d'œuvre (heures + taux manuel ou prédéfini)
 # ---------------------------------------------------------------------------
 @app.route("/chantier/<int:chantier_id>/mo/ajouter", methods=["POST"])
 def mo_ajouter(chantier_id):
+    settings = get_settings()
     description = request.form.get("description", "").strip()
+
+    # Heures (toujours saisie manuelle)
     try:
         heures = float(request.form.get("heures", "0").replace(",", "."))
     except ValueError:
         heures = 0.0
-    try:
-        taux_horaire = float(request.form.get("taux_horaire", "0").replace(",", "."))
-    except ValueError:
-        taux_horaire = 0.0
 
+    # Choix du taux
+    mode = request.form.get("mode", "manuel")  # manuel | taux1 | taux2 | taux3
+
+    if mode.startswith("taux"):
+        key = f"mo_{mode}"          # taux1 → mo_taux1
+        key = key.replace("taux", "taux_")  # → mo_taux_1
+        taux_horaire = settings.get(key, 0.0)
+    else:
+        try:
+            taux_horaire = float(request.form.get("taux_horaire", "0").replace(",", "."))
+        except ValueError:
+            taux_horaire = 0.0
+
+    # Montant : prioritaire si renseigné, sinon heures × taux
     montant_raw = request.form.get("montant", "").strip()
     if montant_raw:
         try:

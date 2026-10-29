@@ -4,10 +4,11 @@
 
 <h1>Panneau d'administration</h1>
 <p class="muted">
-  Ajustez ici la marge par défaut, le taux de TVA, les taux de cotisations sociales et les seuils
-  du régime micro-entreprise / auto-entrepreneur. Les valeurs préremplies correspondent à la
-  situation 2026 pour une activité mixte (vente de pièces + prestations de services artisanales) ;
-  vérifiez-les auprès de votre expert-comptable ou de l'URSSAF, ces montants évoluant régulièrement.
+  Ajustez ici la marge par défaut, le taux de TVA, les taux de cotisations sociales, les taux
+  horaires prédéfinis et les seuils du régime micro-entreprise / auto-entrepreneur. Les valeurs
+  préremplies correspondent à la situation 2026 pour une activité mixte (vente de pièces +
+  prestations de services artisanales) ; vérifiez-les auprès de votre expert-comptable ou de
+  l'URSSAF, ces montants évoluant régulièrement.
 </p>
 
 <section class="card">
@@ -16,6 +17,19 @@
     <div class="settings-group">
       <h3>Marge et TVA</h3>
       {% for key in ["marge_defaut_pct", "tva_rate_pct"] %}
+      <div class="setting-row">
+        <label for="{{ key }}">{{ labels[key][0] }}</label>
+        <div class="input-with-unit">
+          <input type="text" id="{{ key }}" name="{{ key }}" value="{{ settings[key] }}">
+          <span>{{ labels[key][1] }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="settings-group">
+      <h3>Taux horaires prédéfinis (main d'œuvre)</h3>
+      {% for key in ["mo_taux_1", "mo_taux_2", "mo_taux_3"] %}
       <div class="setting-row">
         <label for="{{ key }}">{{ labels[key][0] }}</label>
         <div class="input-with-unit">

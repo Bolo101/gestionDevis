@@ -126,14 +126,43 @@
 
     <h3>Ajouter de la main d'œuvre</h3>
     <form method="post" action="{{ url_for('mo_ajouter', chantier_id=chantier.id) }}" class="inline-form">
-      <label for="mo_desc">Description</label>
+
+      <label for="mo_desc">Description (optionnel)</label>
       <input type="text" id="mo_desc" name="description" placeholder="Ex : Dépose/repose moteur">
 
       <label for="mo_heures">Heures</label>
       <input type="text" id="mo_heures" name="heures" placeholder="Ex : 2.5" required>
 
-      <label for="mo_taux">Taux horaire (€ HT/h)</label>
-      <input type="text" id="mo_taux" name="taux_horaire" placeholder="Ex : 55" required>
+      <!-- Choix du taux horaire -->
+      <fieldset style="border: none; padding: 0; margin: 1rem 0;">
+        <legend style="font-weight: 600; margin-bottom: 0.5rem;">Taux horaire</legend>
+
+        <label style="display: block; margin-bottom: 0.4rem;">
+          <input type="radio" name="mode" value="manuel" checked onchange="toggleTauxMode()">
+          Saisie manuelle
+        </label>
+
+        <label style="display: block; margin-bottom: 0.4rem;">
+          <input type="radio" name="mode" value="taux1" onchange="toggleTauxMode()">
+          Taux 1 — {{ settings.mo_taux_1 | euros }}/h
+        </label>
+
+        <label style="display: block; margin-bottom: 0.4rem;">
+          <input type="radio" name="mode" value="taux2" onchange="toggleTauxMode()">
+          Taux 2 — {{ settings.mo_taux_2 | euros }}/h
+        </label>
+
+        <label style="display: block; margin-bottom: 0.4rem;">
+          <input type="radio" name="mode" value="taux3" onchange="toggleTauxMode()">
+          Taux 3 — {{ settings.mo_taux_3 | euros }}/h
+        </label>
+      </fieldset>
+
+      <!-- Champ visible uniquement en mode manuel -->
+      <div id="taux-manuel-field">
+        <label for="mo_taux">Taux horaire (€ HT/h)</label>
+        <input type="text" id="mo_taux" name="taux_horaire" placeholder="Ex : 55">
+      </div>
 
       <label for="mo_montant">Montant total (€ HT) — laisser vide pour calcul automatique (heures × taux)</label>
       <input type="text" id="mo_montant" name="montant" placeholder="Calcul automatique si vide">
@@ -149,5 +178,14 @@
   </form>
   <a class="btn btn-ghost" href="{{ url_for('index') }}">← Retour au tableau de bord</a>
 </section>
+
+<script>
+function toggleTauxMode() {
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  const field = document.getElementById('taux-manuel-field');
+  field.style.display = (mode === 'manuel') ? 'block' : 'none';
+}
+document.addEventListener('DOMContentLoaded', toggleTauxMode);
+</script>
 
 {% endblock %}
