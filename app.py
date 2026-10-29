@@ -1,71 +1,57 @@
 """
 Suivi de chiffre d'affaires - Garage / Auto-entrepreneur
 =========================================================
-
-Application locale (Flask + SQLite) permettant à un garagiste de :
-- créer des chantiers (interventions),
-- saisir les pièces (prix d'achat + marge -> prix facturé),
-- saisir la main d'œuvre (heures + taux manuel ou prédéfini),
-- calculer le total HT / TTC de chaque chantier,
-- suivre le chiffre d'affaires encaissé dans l'année,
-- anticiper les seuils du régime micro-entreprise / auto-entrepreneur
-  (franchise en base de TVA, plafonds de CA) et visualiser la part
-  de CA prélevée par les cotisations sociales,
-- ajuster tous les paramètres (marge, TVA, seuils, taux de cotisations,
-  taux horaires prédéfinis) depuis un panneau d'administration,
-- purger les chantiers et remettre à zéro le compteur de CA.
-
-Lancement :
-    pip install -r requirements.txt
-    python app.py
-Puis ouvrir : http://127.0.0.1:5001
 """
 
 import sqlite3
 from datetime import datetime, date
 from pathlib import Path
 import os
+from io import BytesIO
 
-from flask import Flask, render_template, request, redirect, url_for, flash, g
+from flask import (
+    Flask, render_template, request, redirect, url_for,
+    flash, g, send_file, abort
+)
+from fpdf import FPDF
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("DATA_DIR", BASE_DIR)) / "garage.db"
+LOGO_PATH = Path(os.environ.get("DATA_DIR", BASE_DIR)) / "logo.png"
 
 app = Flask(__name__)
-app.secret_key = "change-moi-en-production"  # utilisé uniquement pour les messages flash
+app.secret_key = "change-moi-en-production"
 
 # ---------------------------------------------------------------------------
-# Valeurs par défaut des paramètres (France, régime micro-entreprise, 2026)
+# Paramètres par défaut
 # ---------------------------------------------------------------------------
 DEFAULT_SETTINGS = {
-    # Marge par défaut appliquée au prix d'achat des pièces (%)
     "marge_defaut_pct": 30.0,
-    # Taux de TVA appliqué par défaut sur les chantiers (%)
     "tva_rate_pct": 20.0,
-
-    # Taux de cotisations sociales URSSAF (% du CA encaissé, régime micro)
-    "cotisation_vente_pct": 12.3,   # achat/revente de pièces
-    "cotisation_service_pct": 21.2,  # prestations de services artisanales
-
-    # Seuils de franchise en base de TVA
+    "cotisation_vente_pct": 12.3,
+    "cotisation_service_pct": 21.2,
     "seuil_tva_vente_base": 91900.0,
     "seuil_tva_vente_majore": 101000.0,
     "seuil_tva_service_base": 36800.0,
     "seuil_tva_service_majore": 39100.0,
-
-    # Plafonds de chiffre d'affaires du régime micro-entreprise
     "plafond_global": 188700.0,
     "plafond_service": 77700.0,
-
-    # Taux horaires prédéfinis (€/h)
     "mo_taux_1": 45.0,
     "mo_taux_2": 55.0,
     "mo_taux_3": 65.0,
-
-    # Date de référence pour la remise à zéro du compteur de CA
+    # Infos entreprise (stockées en texte via settings texte)
+    "entreprise_nom": "Mon Garage",
+    "entreprise_siret": "",
+    "entreprise_siren": "",
+    "entreprise_adresse": "",
+    "entreprise_cp_ville": "",
+    "entreprise_tel": "",
+    "entreprise_email": "",
     "ca_reset_date": "1970-01-01",
 }
 
+# Les clés texte (entreprise_*) sont stockées comme REAL dans la table settings
+# pour rester compatible. On les gère via une table séparée plus propre.
 SETTINGS_LABELS = {
     "marge_defaut_pct": ("Marge par défaut sur les pièces", "%"),
     "tva_rate_pct": ("Taux de TVA appliqué sur les chantiers", "%"),
@@ -107,13 +93,28 @@ def close_db(exception=None):
 def init_db():
     db = sqlite3.connect(DB_PATH)
     db.execute("""
+        CREATE TABLE IF NOT EXISTS clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT NOT NULL,
+            adresse TEXT,
+            code_postal TEXT,
+            ville TEXT,
+            telephone TEXT,
+            email TEXT,
+            notes TEXT,
+            date_creation TEXT NOT NULL
+        )
+    """)
+    db.execute("""
         CREATE TABLE IF NOT EXISTS chantiers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nom TEXT NOT NULL,
+            client_id INTEGER,
             client TEXT,
             date_creation TEXT NOT NULL,
             date_encaissement TEXT,
-            statut TEXT NOT NULL DEFAULT 'brouillon'
+            statut TEXT NOT NULL DEFAULT 'brouillon',
+            FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE SET NULL
         )
     """)
     db.execute("""
@@ -144,8 +145,35 @@ def init_db():
             value REAL NOT NULL
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS settings_text (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
+
+    # Settings numériques
     for key, value in DEFAULT_SETTINGS.items():
+        if key.startswith("entreprise_") or key == "ca_reset_date":
+            continue
         db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
+
+    # Settings texte (entreprise)
+    text_defaults = {
+        "entreprise_nom": "Mon Garage",
+        "entreprise_siret": "",
+        "entreprise_siren": "",
+        "entreprise_adresse": "",
+        "entreprise_cp_ville": "",
+        "entreprise_tel": "",
+        "entreprise_email": "",
+    }
+    for key, value in text_defaults.items():
+        db.execute(
+            "INSERT OR IGNORE INTO settings_text (key, value) VALUES (?, ?)",
+            (key, value),
+        )
+
     db.commit()
     db.close()
 
@@ -153,6 +181,12 @@ def init_db():
 def get_settings():
     db = get_db()
     rows = db.execute("SELECT key, value FROM settings").fetchall()
+    return {row["key"]: row["value"] for row in rows}
+
+
+def get_settings_text():
+    db = get_db()
+    rows = db.execute("SELECT key, value FROM settings_text").fetchall()
     return {row["key"]: row["value"] for row in rows}
 
 
@@ -192,6 +226,7 @@ def compute_chantier_totals(chantier_id):
     total_pieces_achat = sum(p["prix_achat"] for p in pieces)
     total_pieces_facture = sum(p["prix_facture"] for p in pieces)
     total_mo = sum(m["montant"] for m in mo)
+    total_heures = sum(m["heures"] for m in mo)
 
     total_ht = total_pieces_facture + total_mo
     total_ttc = total_ht * (1 + tva_rate / 100.0)
@@ -203,6 +238,7 @@ def compute_chantier_totals(chantier_id):
         "total_pieces_achat": total_pieces_achat,
         "total_pieces_facture": total_pieces_facture,
         "total_mo": total_mo,
+        "total_heures": total_heures,
         "total_ht": total_ht,
         "total_ttc": total_ttc,
         "tva_montant": total_ttc - total_ht,
@@ -218,7 +254,6 @@ def compute_ca_tracker(year=None):
         year = datetime.now().year
 
     reset_date = get_ca_reset_date()
-
     chantiers = db.execute(
         "SELECT * FROM chantiers WHERE statut = 'encaisse'"
     ).fetchall()
@@ -232,20 +267,16 @@ def compute_ca_tracker(year=None):
             ref_date = datetime.fromisoformat(ref_date_str).date()
         except ValueError:
             continue
-        if ref_date.year != year:
-            continue
-        if ref_date < reset_date:
+        if ref_date.year != year or ref_date < reset_date:
             continue
         totals = compute_chantier_totals(c["id"])
         ca_pieces += totals["total_pieces_facture"]
         ca_service += totals["total_mo"]
 
     ca_total = ca_pieces + ca_service
-
     cotis_vente = ca_pieces * settings["cotisation_vente_pct"] / 100.0
     cotis_service = ca_service * settings["cotisation_service_pct"] / 100.0
     cotisations_total = cotis_vente + cotis_service
-
     part_cotisations_pct = (cotisations_total / ca_total * 100.0) if ca_total > 0 else 0.0
     net_apres_cotisations = ca_total - cotisations_total
 
@@ -307,14 +338,165 @@ def compute_ca_tracker(year=None):
 
 
 # ---------------------------------------------------------------------------
-# Routes - Tableau de bord / chantiers
+# PDF Facture
+# ---------------------------------------------------------------------------
+class FacturePDF(FPDF):
+    def header(self):
+        pass
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Helvetica", "I", 8)
+        self.cell(0, 10, f"Page {self.page_no()}", align="C")
+
+
+def generer_pdf_facture(chantier, client, totals, entreprise):
+    pdf = FacturePDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    # Logo
+    if LOGO_PATH.exists():
+        try:
+            pdf.image(str(LOGO_PATH), x=10, y=8, w=35)
+        except Exception:
+            pass
+
+    # Infos entreprise (droite)
+    pdf.set_xy(120, 10)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 6, entreprise.get("entreprise_nom", "Mon Garage"), ln=1)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_x(120)
+    if entreprise.get("entreprise_adresse"):
+        pdf.cell(0, 5, entreprise["entreprise_adresse"], ln=1)
+        pdf.set_x(120)
+    if entreprise.get("entreprise_cp_ville"):
+        pdf.cell(0, 5, entreprise["entreprise_cp_ville"], ln=1)
+        pdf.set_x(120)
+    if entreprise.get("entreprise_siret"):
+        pdf.cell(0, 5, f"SIRET : {entreprise['entreprise_siret']}", ln=1)
+        pdf.set_x(120)
+    if entreprise.get("entreprise_siren"):
+        pdf.cell(0, 5, f"SIREN : {entreprise['entreprise_siren']}", ln=1)
+        pdf.set_x(120)
+    if entreprise.get("entreprise_tel"):
+        pdf.cell(0, 5, f"Tél : {entreprise['entreprise_tel']}", ln=1)
+        pdf.set_x(120)
+    if entreprise.get("entreprise_email"):
+        pdf.cell(0, 5, entreprise["entreprise_email"], ln=1)
+
+    # Titre
+    pdf.set_y(50)
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, "FACTURE", align="C", ln=1)
+
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"N° {chantier['id']:04d}  —  Date : {chantier['date_creation']}", align="C", ln=1)
+    pdf.ln(5)
+
+    # Client
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 6, "Client", ln=1)
+    pdf.set_font("Helvetica", "", 10)
+    if client:
+        pdf.cell(0, 5, client["nom"], ln=1)
+        if client["adresse"]:
+            pdf.cell(0, 5, client["adresse"], ln=1)
+        if client["code_postal"] or client["ville"]:
+            pdf.cell(0, 5, f"{client['code_postal'] or ''} {client['ville'] or ''}".strip(), ln=1)
+        if client["telephone"]:
+            pdf.cell(0, 5, f"Tél : {client['telephone']}", ln=1)
+        if client["email"]:
+            pdf.cell(0, 5, client["email"], ln=1)
+    else:
+        pdf.cell(0, 5, chantier["client"] or "—", ln=1)
+    pdf.ln(4)
+
+    # Chantier
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 6, f"Chantier : {chantier['nom']}", ln=1)
+    pdf.ln(3)
+
+    # Tableau pièces
+    if totals["pieces"]:
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(90, 7, "Pièces", border=1)
+        pdf.cell(30, 7, "Prix HT", border=1, align="R")
+        pdf.cell(30, 7, "TVA", border=1, align="R")
+        pdf.cell(30, 7, "Prix TTC", border=1, align="R", ln=1)
+
+        pdf.set_font("Helvetica", "", 9)
+        tva_rate = totals["tva_rate"]
+        for p in totals["pieces"]:
+            ht = p["prix_facture"]
+            ttc = ht * (1 + tva_rate / 100.0)
+            tva = ttc - ht
+            pdf.cell(90, 6, (p["nom"] or "")[:45], border=1)
+            pdf.cell(30, 6, f"{ht:.2f} €", border=1, align="R")
+            pdf.cell(30, 6, f"{tva:.2f} €", border=1, align="R")
+            pdf.cell(30, 6, f"{ttc:.2f} €", border=1, align="R", ln=1)
+        pdf.ln(3)
+
+    # Tableau main d'œuvre
+    if totals["mo"]:
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(70, 7, "Main d'œuvre", border=1)
+        pdf.cell(25, 7, "Heures", border=1, align="R")
+        pdf.cell(25, 7, "Taux", border=1, align="R")
+        pdf.cell(30, 7, "Montant HT", border=1, align="R")
+        pdf.cell(30, 7, "Montant TTC", border=1, align="R", ln=1)
+
+        pdf.set_font("Helvetica", "", 9)
+        tva_rate = totals["tva_rate"]
+        for m in totals["mo"]:
+            ht = m["montant"]
+            ttc = ht * (1 + tva_rate / 100.0)
+            pdf.cell(70, 6, (m["description"] or "Main d'œuvre")[:35], border=1)
+            pdf.cell(25, 6, f"{m['heures']:.2f}", border=1, align="R")
+            pdf.cell(25, 6, f"{m['taux_horaire']:.2f} €", border=1, align="R")
+            pdf.cell(30, 6, f"{ht:.2f} €", border=1, align="R")
+            pdf.cell(30, 6, f"{ttc:.2f} €", border=1, align="R", ln=1)
+        pdf.ln(3)
+
+    # Totaux
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(120, 7, "Total heures main d'œuvre", border=0)
+    pdf.cell(60, 7, f"{totals['total_heures']:.2f} h", border=0, align="R", ln=1)
+
+    pdf.cell(120, 7, "Total HT", border=0)
+    pdf.cell(60, 7, f"{totals['total_ht']:.2f} €", border=0, align="R", ln=1)
+
+    pdf.cell(120, 7, f"TVA ({totals['tva_rate']} %)", border=0)
+    pdf.cell(60, 7, f"{totals['tva_montant']:.2f} €", border=0, align="R", ln=1)
+
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(120, 9, "TOTAL TTC", border=1)
+    pdf.cell(60, 9, f"{totals['total_ttc']:.2f} €", border=1, align="R", ln=1)
+
+    pdf.ln(10)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.multi_cell(0, 4, "Facture établie en euros. TVA non applicable, art. 293 B du CGI "
+                        "(si micro-entreprise en franchise de TVA) — à adapter selon votre situation.")
+
+    buffer = BytesIO()
+    pdf.output(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+# ---------------------------------------------------------------------------
+# Routes - Tableau de bord
 # ---------------------------------------------------------------------------
 @app.route("/")
 def index():
     db = get_db()
-    chantiers = db.execute(
-        "SELECT * FROM chantiers ORDER BY date_creation DESC, id DESC"
-    ).fetchall()
+    chantiers = db.execute("""
+        SELECT c.*, cl.nom AS client_nom
+        FROM chantiers c
+        LEFT JOIN clients cl ON c.client_id = cl.id
+        ORDER BY c.date_creation DESC, c.id DESC
+    """).fetchall()
 
     chantiers_data = []
     for c in chantiers:
@@ -322,7 +504,6 @@ def index():
         chantiers_data.append({"chantier": c, "totals": totals})
 
     tracker = compute_ca_tracker()
-
     return render_template(
         "index.html",
         chantiers_data=chantiers_data,
@@ -331,43 +512,214 @@ def index():
     )
 
 
-@app.route("/chantier/nouveau", methods=["GET", "POST"])
-def chantier_nouveau():
+# ---------------------------------------------------------------------------
+# Routes - Clients
+# ---------------------------------------------------------------------------
+@app.route("/clients")
+def clients_list():
+    db = get_db()
+    clients = db.execute(
+        "SELECT * FROM clients ORDER BY nom COLLATE NOCASE"
+    ).fetchall()
+    return render_template("clients.html", clients=clients)
+
+
+@app.route("/client/nouveau", methods=["GET", "POST"])
+def client_nouveau():
     if request.method == "POST":
         nom = request.form.get("nom", "").strip()
-        client = request.form.get("client", "").strip()
+        if not nom:
+            flash("Le nom du client est obligatoire.", "error")
+            return redirect(url_for("client_nouveau"))
+        db = get_db()
+        db.execute(
+            """INSERT INTO clients (nom, adresse, code_postal, ville, telephone, email, notes, date_creation)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                nom,
+                request.form.get("adresse", "").strip(),
+                request.form.get("code_postal", "").strip(),
+                request.form.get("ville", "").strip(),
+                request.form.get("telephone", "").strip(),
+                request.form.get("email", "").strip(),
+                request.form.get("notes", "").strip(),
+                date.today().isoformat(),
+            ),
+        )
+        db.commit()
+        new_id = db.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        flash("Client créé.", "success")
+        return redirect(url_for("client_detail", client_id=new_id))
+    return render_template("client_form.html", client=None, titre="Nouveau client")
+
+
+@app.route("/client/<int:client_id>")
+def client_detail(client_id):
+    db = get_db()
+    client = db.execute("SELECT * FROM clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        flash("Client introuvable.", "error")
+        return redirect(url_for("clients_list"))
+
+    chantiers = db.execute(
+        "SELECT * FROM chantiers WHERE client_id = ? ORDER BY date_creation DESC",
+        (client_id,),
+    ).fetchall()
+
+    chantiers_data = []
+    for c in chantiers:
+        totals = compute_chantier_totals(c["id"])
+        chantiers_data.append({"chantier": c, "totals": totals})
+
+    return render_template(
+        "client_detail.html",
+        client=client,
+        chantiers_data=chantiers_data,
+        statut_labels=STATUT_LABELS,
+    )
+
+
+@app.route("/client/<int:client_id>/modifier", methods=["GET", "POST"])
+def client_modifier(client_id):
+    db = get_db()
+    client = db.execute("SELECT * FROM clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        flash("Client introuvable.", "error")
+        return redirect(url_for("clients_list"))
+
+    if request.method == "POST":
+        nom = request.form.get("nom", "").strip()
+        if not nom:
+            flash("Le nom du client est obligatoire.", "error")
+            return redirect(url_for("client_modifier", client_id=client_id))
+        db.execute(
+            """UPDATE clients SET nom=?, adresse=?, code_postal=?, ville=?,
+               telephone=?, email=?, notes=? WHERE id=?""",
+            (
+                nom,
+                request.form.get("adresse", "").strip(),
+                request.form.get("code_postal", "").strip(),
+                request.form.get("ville", "").strip(),
+                request.form.get("telephone", "").strip(),
+                request.form.get("email", "").strip(),
+                request.form.get("notes", "").strip(),
+                client_id,
+            ),
+        )
+        db.commit()
+        flash("Client mis à jour.", "success")
+        return redirect(url_for("client_detail", client_id=client_id))
+
+    return render_template("client_form.html", client=client, titre="Modifier le client")
+
+
+@app.route("/client/<int:client_id>/supprimer", methods=["POST"])
+def client_supprimer(client_id):
+    db = get_db()
+    db.execute("UPDATE chantiers SET client_id = NULL WHERE client_id = ?", (client_id,))
+    db.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+    db.commit()
+    flash("Client supprimé.", "success")
+    return redirect(url_for("clients_list"))
+
+
+# ---------------------------------------------------------------------------
+# Routes - Chantiers
+# ---------------------------------------------------------------------------
+@app.route("/chantier/nouveau", methods=["GET", "POST"])
+def chantier_nouveau():
+    db = get_db()
+    clients = db.execute("SELECT id, nom FROM clients ORDER BY nom COLLATE NOCASE").fetchall()
+
+    if request.method == "POST":
+        nom = request.form.get("nom", "").strip()
         if not nom:
             flash("Le nom du chantier est obligatoire.", "error")
             return redirect(url_for("chantier_nouveau"))
-        db = get_db()
+
+        client_id = request.form.get("client_id")
+        nouveau_client_nom = request.form.get("nouveau_client_nom", "").strip()
+
+        # Création à la volée d'un client si un nom est fourni
+        if nouveau_client_nom:
+            db.execute(
+                "INSERT INTO clients (nom, date_creation) VALUES (?, ?)",
+                (nouveau_client_nom, date.today().isoformat()),
+            )
+            db.commit()
+            client_id = db.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        elif client_id:
+            client_id = int(client_id)
+        else:
+            client_id = None
+
+        # Récupérer le nom du client pour le champ legacy "client"
+        client_nom = None
+        if client_id:
+            row = db.execute("SELECT nom FROM clients WHERE id = ?", (client_id,)).fetchone()
+            client_nom = row["nom"] if row else None
+
         db.execute(
-            "INSERT INTO chantiers (nom, client, date_creation, statut) VALUES (?, ?, ?, ?)",
-            (nom, client, date.today().isoformat(), "brouillon"),
+            """INSERT INTO chantiers (nom, client_id, client, date_creation, statut)
+               VALUES (?, ?, ?, ?, ?)""",
+            (nom, client_id, client_nom, date.today().isoformat(), "brouillon"),
         )
         db.commit()
         new_id = db.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
         flash("Chantier créé.", "success")
         return redirect(url_for("chantier_detail", chantier_id=new_id))
-    return render_template("chantier_nouveau.html")
+
+    return render_template("chantier_nouveau.html", clients=clients)
 
 
 @app.route("/chantier/<int:chantier_id>")
 def chantier_detail(chantier_id):
     db = get_db()
-    chantier = db.execute("SELECT * FROM chantiers WHERE id = ?", (chantier_id,)).fetchone()
+    chantier = db.execute("""
+        SELECT c.*, cl.nom AS client_nom, cl.id AS client_id_joined
+        FROM chantiers c
+        LEFT JOIN clients cl ON c.client_id = cl.id
+        WHERE c.id = ?
+    """, (chantier_id,)).fetchone()
+
     if chantier is None:
         flash("Chantier introuvable.", "error")
         return redirect(url_for("index"))
+
     totals = compute_chantier_totals(chantier_id)
     settings = get_settings()
+    clients = db.execute("SELECT id, nom FROM clients ORDER BY nom COLLATE NOCASE").fetchall()
+
     return render_template(
         "chantier.html",
         chantier=chantier,
         totals=totals,
         settings=settings,
+        clients=clients,
         statuts=STATUTS,
         statut_labels=STATUT_LABELS,
     )
+
+
+@app.route("/chantier/<int:chantier_id>/assigner_client", methods=["POST"])
+def chantier_assigner_client(chantier_id):
+    db = get_db()
+    client_id = request.form.get("client_id")
+    if client_id:
+        client_id = int(client_id)
+        row = db.execute("SELECT nom FROM clients WHERE id = ?", (client_id,)).fetchone()
+        client_nom = row["nom"] if row else None
+    else:
+        client_id = None
+        client_nom = None
+
+    db.execute(
+        "UPDATE chantiers SET client_id = ?, client = ? WHERE id = ?",
+        (client_id, client_nom, chantier_id),
+    )
+    db.commit()
+    flash("Client assigné.", "success")
+    return redirect(url_for("chantier_detail", chantier_id=chantier_id))
 
 
 @app.route("/chantier/<int:chantier_id>/statut", methods=["POST"])
@@ -398,6 +750,25 @@ def chantier_supprimer(chantier_id):
     db.commit()
     flash("Chantier supprimé.", "success")
     return redirect(url_for("index"))
+
+
+@app.route("/chantier/<int:chantier_id>/pdf")
+def chantier_pdf(chantier_id):
+    db = get_db()
+    chantier = db.execute("SELECT * FROM chantiers WHERE id = ?", (chantier_id,)).fetchone()
+    if not chantier:
+        abort(404)
+
+    client = None
+    if chantier["client_id"]:
+        client = db.execute("SELECT * FROM clients WHERE id = ?", (chantier["client_id"],)).fetchone()
+
+    totals = compute_chantier_totals(chantier_id)
+    entreprise = get_settings_text()
+
+    buffer = generer_pdf_facture(chantier, client, totals, entreprise)
+    filename = f"facture_{chantier_id:04d}_{chantier['nom'][:30].replace(' ', '_')}.pdf"
+    return send_file(buffer, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
 
 # ---------------------------------------------------------------------------
@@ -457,25 +828,21 @@ def piece_supprimer(piece_id):
 
 
 # ---------------------------------------------------------------------------
-# Routes - Main d'œuvre (heures + taux manuel ou prédéfini)
+# Routes - Main d'œuvre
 # ---------------------------------------------------------------------------
 @app.route("/chantier/<int:chantier_id>/mo/ajouter", methods=["POST"])
 def mo_ajouter(chantier_id):
     settings = get_settings()
     description = request.form.get("description", "").strip()
 
-    # Heures (toujours saisie manuelle)
     try:
         heures = float(request.form.get("heures", "0").replace(",", "."))
     except ValueError:
         heures = 0.0
 
-    # Choix du taux
-    mode = request.form.get("mode", "manuel")  # manuel | taux1 | taux2 | taux3
-
+    mode = request.form.get("mode", "manuel")
     if mode.startswith("taux"):
-        key = f"mo_{mode}"          # taux1 → mo_taux1
-        key = key.replace("taux", "taux_")  # → mo_taux_1
+        key = f"mo_{mode}".replace("taux", "taux_")
         taux_horaire = settings.get(key, 0.0)
     else:
         try:
@@ -483,7 +850,6 @@ def mo_ajouter(chantier_id):
         except ValueError:
             taux_horaire = 0.0
 
-    # Montant : prioritaire si renseigné, sinon heures × taux
     montant_raw = request.form.get("montant", "").strip()
     if montant_raw:
         try:
@@ -521,12 +887,15 @@ def mo_supprimer(mo_id):
 @app.route("/admin", methods=["GET"])
 def admin():
     settings = get_settings()
+    settings_text = get_settings_text()
     reset_date = get_ca_reset_date()
     return render_template(
         "admin.html",
         settings=settings,
+        settings_text=settings_text,
         labels=SETTINGS_LABELS,
         reset_date=reset_date,
+        logo_exists=LOGO_PATH.exists(),
     )
 
 
@@ -547,7 +916,34 @@ def admin_parametres():
             (key, value),
         )
     db.commit()
-    flash("Paramètres mis à jour.", "success")
+    flash("Paramètres numériques mis à jour.", "success")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/entreprise", methods=["POST"])
+def admin_entreprise():
+    db = get_db()
+    text_keys = [
+        "entreprise_nom", "entreprise_siret", "entreprise_siren",
+        "entreprise_adresse", "entreprise_cp_ville",
+        "entreprise_tel", "entreprise_email",
+    ]
+    for key in text_keys:
+        value = request.form.get(key, "").strip()
+        db.execute(
+            "INSERT INTO settings_text (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+    db.commit()
+
+    # Upload logo
+    if "logo" in request.files:
+        f = request.files["logo"]
+        if f and f.filename:
+            f.save(LOGO_PATH)
+
+    flash("Informations entreprise mises à jour.", "success")
     return redirect(url_for("admin"))
 
 
@@ -562,7 +958,7 @@ def admin_purger():
     db.execute("DELETE FROM main_oeuvre")
     db.execute("DELETE FROM chantiers")
     db.commit()
-    flash("Tous les chantiers ont été supprimés de la base de données.", "success")
+    flash("Tous les chantiers ont été supprimés.", "success")
     return redirect(url_for("admin"))
 
 
@@ -573,11 +969,7 @@ def admin_reset_ca():
         flash("Remise à zéro annulée : confirmation incorrecte.", "error")
         return redirect(url_for("admin"))
     set_ca_reset_date(date.today())
-    flash(
-        "Le compteur de chiffre d'affaires a été remis à zéro à la date du jour. "
-        "L'historique des chantiers est conservé.",
-        "success",
-    )
+    flash("Compteur de CA remis à zéro.", "success")
     return redirect(url_for("admin"))
 
 
@@ -585,7 +977,7 @@ def admin_reset_ca():
 def admin_reset_defaults():
     db = get_db()
     for key, value in DEFAULT_SETTINGS.items():
-        if key == "ca_reset_date":
+        if key.startswith("entreprise_") or key == "ca_reset_date":
             continue
         db.execute(
             "INSERT INTO settings (key, value) VALUES (?, ?) "
@@ -593,7 +985,7 @@ def admin_reset_defaults():
             (key, value),
         )
     db.commit()
-    flash("Paramètres réinitialisés aux valeurs par défaut 2026.", "success")
+    flash("Paramètres numériques réinitialisés.", "success")
     return redirect(url_for("admin"))
 
 
