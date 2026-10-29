@@ -5,12 +5,55 @@
 <h1>Panneau d'administration</h1>
 <p class="muted">
   Ajustez ici la marge par défaut, le taux de TVA, les taux de cotisations sociales, les taux
-  horaires prédéfinis et les seuils du régime micro-entreprise / auto-entrepreneur. Les valeurs
-  préremplies correspondent à la situation 2026 pour une activité mixte (vente de pièces +
-  prestations de services artisanales) ; vérifiez-les auprès de votre expert-comptable ou de
-  l'URSSAF, ces montants évoluant régulièrement.
+  horaires prédéfinis, les informations de l'entreprise et les seuils du régime micro-entreprise.
 </p>
 
+<!-- ========== INFORMATIONS ENTREPRISE ========== -->
+<section class="card">
+  <h2>Informations de l'entreprise (pour les factures PDF)</h2>
+  <form method="post" action="{{ url_for('admin_entreprise') }}" enctype="multipart/form-data" class="settings-form">
+    <div class="settings-group">
+      <div class="setting-row">
+        <label for="entreprise_nom">Nom du garage / entreprise</label>
+        <input type="text" id="entreprise_nom" name="entreprise_nom" value="{{ settings_text.entreprise_nom or '' }}">
+      </div>
+      <div class="setting-row">
+        <label for="entreprise_siret">SIRET</label>
+        <input type="text" id="entreprise_siret" name="entreprise_siret" value="{{ settings_text.entreprise_siret or '' }}">
+      </div>
+      <div class="setting-row">
+        <label for="entreprise_siren">SIREN</label>
+        <input type="text" id="entreprise_siren" name="entreprise_siren" value="{{ settings_text.entreprise_siren or '' }}">
+      </div>
+      <div class="setting-row">
+        <label for="entreprise_adresse">Adresse</label>
+        <input type="text" id="entreprise_adresse" name="entreprise_adresse" value="{{ settings_text.entreprise_adresse or '' }}">
+      </div>
+      <div class="setting-row">
+        <label for="entreprise_cp_ville">Code postal + Ville</label>
+        <input type="text" id="entreprise_cp_ville" name="entreprise_cp_ville" value="{{ settings_text.entreprise_cp_ville or '' }}">
+      </div>
+      <div class="setting-row">
+        <label for="entreprise_tel">Téléphone</label>
+        <input type="text" id="entreprise_tel" name="entreprise_tel" value="{{ settings_text.entreprise_tel or '' }}">
+      </div>
+      <div class="setting-row">
+        <label for="entreprise_email">Email</label>
+        <input type="text" id="entreprise_email" name="entreprise_email" value="{{ settings_text.entreprise_email or '' }}">
+      </div>
+      <div class="setting-row">
+        <label for="logo">Logo (PNG ou JPG)</label>
+        <input type="file" id="logo" name="logo" accept="image/png,image/jpeg">
+        {% if logo_exists %}
+          <p class="muted" style="margin-top:0.3rem;">Un logo est déjà enregistré.</p>
+        {% endif %}
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Enregistrer les infos entreprise</button>
+  </form>
+</section>
+
+<!-- ========== PARAMÈTRES NUMÉRIQUES ========== -->
 <section class="card">
   <h2>Paramètres généraux</h2>
   <form method="post" action="{{ url_for('admin_parametres') }}" class="settings-form">
@@ -107,8 +150,8 @@
   <div class="danger-block">
     <h3>Purger tous les chantiers</h3>
     <p class="muted">
-      Supprime définitivement tous les chantiers, pièces et lignes de main d'œuvre de la base de
-      données. Cette action est irréversible.
+      Supprime définitivement tous les chantiers, pièces et lignes de main d'œuvre.
+      Cette action est irréversible.
     </p>
     <form method="post" action="{{ url_for('admin_purger') }}" onsubmit="return confirm('Cette action est irréversible. Confirmer la purge complète ?');">
       <label for="confirm_purge">Tapez <strong>PURGER</strong> pour confirmer</label>

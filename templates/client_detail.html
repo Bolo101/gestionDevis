@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ client.nom }} — Client{% endblock %}
+{% block content %}
+
+<div class="section-header">
+  <div>
+    <h1>{{ client.nom }}</h1>
+    <p class="muted">
+      {% if client.adresse %}{{ client.adresse }} · {% endif %}
+      {% if client.code_postal or client.ville %}{{ client.code_postal or '' }} {{ client.ville or '' }} · {% endif %}
+      {% if client.telephone %}Tél : {{ client.telephone }} · {% endif %}
+      {% if client.email %}{{ client.email }}{% endif %}
+    </p>
+    {% if client.notes %}<p class="muted">{{ client.notes }}</p>{% endif %}
+  </div>
+  <div style="display:flex; gap:0.5rem;">
+    <a class="btn btn-ghost" href="{{ url_for('client_modifier', client_id=client.id) }}">Modifier</a>
+    <a class="btn btn-primary" href="{{ url_for('chantier_nouveau') }}">+ Nouveau chantier</a>
+  </div>
+</div>
+
+<section class="chantiers-section">
+  <h2>Chantiers de ce client</h2>
+
+  {% if chantiers_data|length == 0 %}
+    <p class="empty">Aucun chantier associé à ce client.</p>
+  {% else %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Chantier</th>
+        <th>Date</th>
+        <th>Statut</th>
+        <th>Total HT</th>
+        <th>Total TTC</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in chantiers_data %}
+      <tr>
+        <td><a href="{{ url_for('chantier_detail', chantier_id=item.chantier.id) }}">{{ item.chantier.nom }}</a></td>
+        <td>{{ item.chantier.date_creation }}</td>
+        <td><span class="statut statut-{{ item.chantier.statut }}">{{ statut_labels[item.chantier.statut] }}</span></td>
+        <td>{{ item.totals.total_ht | euros }}</td>
+        <td>{{ item.totals.total_ttc | euros }}</td>
+        <td>
+          <a class="btn btn-small" href="{{ url_for('chantier_detail', chantier_id=item.chantier.id) }}">Ouvrir</a>
+          <a class="btn btn-small" href="{{ url_for('chantier_pdf', chantier_id=item.chantier.id) }}">PDF</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section class="danger-zone" style="margin-top:2rem;">
+  <form method="post" action="{{ url_for('client_supprimer', client_id=client.id) }}"
+        onsubmit="return confirm('Supprimer ce client ? Les chantiers ne seront pas supprimés.');">
+    <button type="submit" class="btn btn-danger">Supprimer ce client</button>
+  </form>
+  <a class="btn btn-ghost" href="{{ url_for('clients_list') }}">← Retour aux clients</a>
+</section>
+
+{% endblock %}

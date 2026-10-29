@@ -6,19 +6,45 @@
   <div>
     <h1>{{ chantier.nom }}</h1>
     <p class="muted">
-      Client : {{ chantier.client or '—' }} · Créé le {{ chantier.date_creation }}
+      Client :
+      {% if chantier.client_id %}
+        <a href="{{ url_for('client_detail', client_id=chantier.client_id) }}">{{ chantier.client_nom or chantier.client }}</a>
+      {% else %}
+        {{ chantier.client or '—' }}
+      {% endif %}
+      · Créé le {{ chantier.date_creation }}
       {% if chantier.date_encaissement %} · Encaissé le {{ chantier.date_encaissement }}{% endif %}
     </p>
   </div>
-  <form method="post" action="{{ url_for('chantier_statut', chantier_id=chantier.id) }}" class="statut-form">
-    <label for="statut">Statut</label>
-    <select id="statut" name="statut" onchange="this.form.submit()">
-      {% for s in statuts %}
-        <option value="{{ s }}" {{ 'selected' if s == chantier.statut else '' }}>{{ statut_labels[s] }}</option>
-      {% endfor %}
-    </select>
-  </form>
+  <div style="display:flex; gap:0.5rem; align-items:flex-start;">
+    <a class="btn btn-primary" href="{{ url_for('chantier_pdf', chantier_id=chantier.id) }}">📄 Facture PDF</a>
+    <form method="post" action="{{ url_for('chantier_statut', chantier_id=chantier.id) }}" class="statut-form">
+      <label for="statut">Statut</label>
+      <select id="statut" name="statut" onchange="this.form.submit()">
+        {% for s in statuts %}
+          <option value="{{ s }}" {{ 'selected' if s == chantier.statut else '' }}>{{ statut_labels[s] }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
 </div>
+
+<!-- Assignation client -->
+<section class="card" style="margin-bottom:1rem;">
+  <h3>Assigner un client</h3>
+  <form method="post" action="{{ url_for('chantier_assigner_client', chantier_id=chantier.id) }}" class="inline-form" style="display:flex; gap:0.5rem; align-items:end;">
+    <div style="flex:1;">
+      <label for="client_id">Client</label>
+      <select id="client_id" name="client_id">
+        <option value="">— Aucun —</option>
+        {% for c in clients %}
+          <option value="{{ c.id }}" {{ 'selected' if chantier.client_id == c.id else '' }}>{{ c.nom }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Assigner</button>
+  </form>
+</section>
 
 <section class="totals-card">
   <div class="stat">
@@ -83,16 +109,12 @@
     <form method="post" action="{{ url_for('piece_ajouter', chantier_id=chantier.id) }}" class="inline-form">
       <label for="p_nom">Nom de la pièce</label>
       <input type="text" id="p_nom" name="nom" placeholder="Ex : Plaquettes de frein" required>
-
       <label for="p_achat">Prix d'achat (€ HT)</label>
       <input type="text" id="p_achat" name="prix_achat" placeholder="Ex : 45.00" required>
-
       <label for="p_marge">Marge (%) — laisser vide pour utiliser la marge par défaut ({{ settings.marge_defaut_pct }} %)</label>
       <input type="text" id="p_marge" name="marge_pct" placeholder="Ex : 30">
-
-      <label for="p_facture">Prix facturé (€ HT) — laisser vide pour calcul automatique (achat + marge)</label>
+      <label for="p_facture">Prix facturé (€ HT) — laisser vide pour calcul automatique</label>
       <input type="text" id="p_facture" name="prix_facture" placeholder="Calcul automatique si vide">
-
       <button type="submit" class="btn btn-primary">Ajouter la pièce</button>
     </form>
   </div>
@@ -126,47 +148,38 @@
 
     <h3>Ajouter de la main d'œuvre</h3>
     <form method="post" action="{{ url_for('mo_ajouter', chantier_id=chantier.id) }}" class="inline-form">
-
       <label for="mo_desc">Description (optionnel)</label>
       <input type="text" id="mo_desc" name="description" placeholder="Ex : Dépose/repose moteur">
-
       <label for="mo_heures">Heures</label>
       <input type="text" id="mo_heures" name="heures" placeholder="Ex : 2.5" required>
 
-      <!-- Choix du taux horaire -->
       <fieldset style="border: none; padding: 0; margin: 1rem 0;">
         <legend style="font-weight: 600; margin-bottom: 0.5rem;">Taux horaire</legend>
-
         <label style="display: block; margin-bottom: 0.4rem;">
           <input type="radio" name="mode" value="manuel" checked onchange="toggleTauxMode()">
           Saisie manuelle
         </label>
-
         <label style="display: block; margin-bottom: 0.4rem;">
           <input type="radio" name="mode" value="taux1" onchange="toggleTauxMode()">
           Taux 1 — {{ settings.mo_taux_1 | euros }}/h
         </label>
-
         <label style="display: block; margin-bottom: 0.4rem;">
           <input type="radio" name="mode" value="taux2" onchange="toggleTauxMode()">
           Taux 2 — {{ settings.mo_taux_2 | euros }}/h
         </label>
-
         <label style="display: block; margin-bottom: 0.4rem;">
           <input type="radio" name="mode" value="taux3" onchange="toggleTauxMode()">
           Taux 3 — {{ settings.mo_taux_3 | euros }}/h
         </label>
       </fieldset>
 
-      <!-- Champ visible uniquement en mode manuel -->
       <div id="taux-manuel-field">
         <label for="mo_taux">Taux horaire (€ HT/h)</label>
         <input type="text" id="mo_taux" name="taux_horaire" placeholder="Ex : 55">
       </div>
 
-      <label for="mo_montant">Montant total (€ HT) — laisser vide pour calcul automatique (heures × taux)</label>
+      <label for="mo_montant">Montant total (€ HT) — laisser vide pour calcul automatique</label>
       <input type="text" id="mo_montant" name="montant" placeholder="Calcul automatique si vide">
-
       <button type="submit" class="btn btn-primary">Ajouter la main d'œuvre</button>
     </form>
   </div>
@@ -182,8 +195,7 @@
 <script>
 function toggleTauxMode() {
   const mode = document.querySelector('input[name="mode"]:checked').value;
-  const field = document.getElementById('taux-manuel-field');
-  field.style.display = (mode === 'manuel') ? 'block' : 'none';
+  document.getElementById('taux-manuel-field').style.display = (mode === 'manuel') ? 'block' : 'none';
 }
 document.addEventListener('DOMContentLoaded', toggleTauxMode);
 </script>

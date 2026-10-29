@@ -7,8 +7,17 @@
     <label for="nom">Nom du chantier</label>
     <input type="text" id="nom" name="nom" placeholder="Ex : Vidange + freins - Peugeot 208" required>
 
-    <label for="client">Client (optionnel)</label>
-    <input type="text" id="client" name="client" placeholder="Nom du client">
+    <label for="client_id">Client existant (optionnel)</label>
+    <select id="client_id" name="client_id">
+      <option value="">— Aucun —</option>
+      {% for c in clients %}
+        <option value="{{ c.id }}">{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+
+    <p class="muted" style="margin: 0.8rem 0 0.3rem;">OU créer un nouveau client à la volée :</p>
+    <label for="nouveau_client_nom">Nom du nouveau client (optionnel)</label>
+    <input type="text" id="nouveau_client_nom" name="nouveau_client_nom" placeholder="Ex : Dupont Jean">
 
     <button type="submit" class="btn btn-primary">Créer le chantier</button>
     <a class="btn btn-ghost" href="{{ url_for('index') }}">Annuler</a>

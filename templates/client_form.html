@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ titre }} — Suivi Garage{% endblock %}
+{% block content %}
+<section class="card form-card">
+  <h1>{{ titre }}</h1>
+  <form method="post">
+    <label for="nom">Nom *</label>
+    <input type="text" id="nom" name="nom" value="{{ client.nom if client else '' }}" required>
+
+    <label for="adresse">Adresse</label>
+    <input type="text" id="adresse" name="adresse" value="{{ client.adresse if client else '' }}">
+
+    <label for="code_postal">Code postal</label>
+    <input type="text" id="code_postal" name="code_postal" value="{{ client.code_postal if client else '' }}">
+
+    <label for="ville">Ville</label>
+    <input type="text" id="ville" name="ville" value="{{ client.ville if client else '' }}">
+
+    <label for="telephone">Téléphone</label>
+    <input type="text" id="telephone" name="telephone" value="{{ client.telephone if client else '' }}">
+
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" value="{{ client.email if client else '' }}">
+
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes" rows="3">{{ client.notes if client else '' }}</textarea>
+
+    <button type="submit" class="btn btn-primary">Enregistrer</button>
+    <a class="btn btn-ghost" href="{{ url_for('clients_list') }}">Annuler</a>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Clients — Suivi Garage{% endblock %}
+{% block content %}
+
+<div class="section-header">
+  <h1>Clients</h1>
+  <a class="btn btn-primary" href="{{ url_for('client_nouveau') }}">+ Nouveau client</a>
+</div>
+
+{% if clients|length == 0 %}
+  <p class="empty">Aucun client enregistré pour le moment.</p>
+{% else %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Nom</th>
+        <th>Téléphone</th>
+        <th>Email</th>
+        <th>Ville</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in clients %}
+      <tr>
+        <td><a href="{{ url_for('client_detail', client_id=c.id) }}">{{ c.nom }}</a></td>
+        <td>{{ c.telephone or '—' }}</td>
+        <td>{{ c.email or '—' }}</td>
+        <td>{{ c.ville or '—' }}</td>
+        <td><a class="btn btn-small" href="{{ url_for('client_detail', client_id=c.id) }}">Dossier</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+
+{% endblock %}
