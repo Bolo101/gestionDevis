@@ -341,13 +341,42 @@ def compute_ca_tracker(year=None):
 # PDF Facture
 # ---------------------------------------------------------------------------
 class FacturePDF(FPDF):
-    def header(self):
-        pass
-
     def footer(self):
         self.set_y(-15)
         self.set_font("Helvetica", "I", 8)
         self.cell(0, 10, f"Page {self.page_no()}", align="C")
+
+
+def _safe(text):
+    """Remplace les caractères non supportés par Helvetica."""
+    if text is None:
+        return ""
+    text = str(text)
+    replacements = {
+        "€": "EUR",
+        "’": "'",
+        "‘": "'",
+        "“": '"',
+        "”": '"',
+        "–": "-",
+        "—": "-",
+        "…": "...",
+        "à": "a", "â": "a", "ä": "a",
+        "é": "e", "è": "e", "ê": "e", "ë": "e",
+        "î": "i", "ï": "i",
+        "ô": "o", "ö": "o",
+        "ù": "u", "û": "u", "ü": "u",
+        "ç": "c",
+        "À": "A", "Â": "A", "Ä": "A",
+        "É": "E", "È": "E", "Ê": "E", "Ë": "E",
+        "Î": "I", "Ï": "I",
+        "Ô": "O", "Ö": "O",
+        "Ù": "U", "Û": "U", "Ü": "U",
+        "Ç": "C",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
 
 
 def generer_pdf_facture(chantier, client, totals, entreprise):
@@ -365,119 +394,129 @@ def generer_pdf_facture(chantier, client, totals, entreprise):
     # Infos entreprise (droite)
     pdf.set_xy(120, 10)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 6, entreprise.get("entreprise_nom", "Mon Garage"), ln=1)
+    pdf.cell(0, 6, _safe(entreprise.get("entreprise_nom", "Mon Garage")), ln=True)
+
     pdf.set_font("Helvetica", "", 9)
-    pdf.set_x(120)
-    if entreprise.get("entreprise_adresse"):
-        pdf.cell(0, 5, entreprise["entreprise_adresse"], ln=1)
-        pdf.set_x(120)
-    if entreprise.get("entreprise_cp_ville"):
-        pdf.cell(0, 5, entreprise["entreprise_cp_ville"], ln=1)
-        pdf.set_x(120)
+    for key in ["entreprise_adresse", "entreprise_cp_ville"]:
+        val = entreprise.get(key)
+        if val:
+            pdf.set_x(120)
+            pdf.cell(0, 5, _safe(val), ln=True)
+
     if entreprise.get("entreprise_siret"):
-        pdf.cell(0, 5, f"SIRET : {entreprise['entreprise_siret']}", ln=1)
         pdf.set_x(120)
+        pdf.cell(0, 5, _safe(f"SIRET : {entreprise['entreprise_siret']}"), ln=True)
     if entreprise.get("entreprise_siren"):
-        pdf.cell(0, 5, f"SIREN : {entreprise['entreprise_siren']}", ln=1)
         pdf.set_x(120)
+        pdf.cell(0, 5, _safe(f"SIREN : {entreprise['entreprise_siren']}"), ln=True)
     if entreprise.get("entreprise_tel"):
-        pdf.cell(0, 5, f"Tél : {entreprise['entreprise_tel']}", ln=1)
         pdf.set_x(120)
+        pdf.cell(0, 5, _safe(f"Tel : {entreprise['entreprise_tel']}"), ln=True)
     if entreprise.get("entreprise_email"):
-        pdf.cell(0, 5, entreprise["entreprise_email"], ln=1)
+        pdf.set_x(120)
+        pdf.cell(0, 5, _safe(entreprise["entreprise_email"]), ln=True)
 
     # Titre
     pdf.set_y(50)
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "FACTURE", align="C", ln=1)
+    pdf.cell(0, 10, "FACTURE", align="C", ln=True)
 
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"N° {chantier['id']:04d}  —  Date : {chantier['date_creation']}", align="C", ln=1)
+    pdf.cell(
+        0, 6,
+        _safe(f"N {chantier['id']:04d}  -  Date : {chantier['date_creation']}"),
+        align="C", ln=True
+    )
     pdf.ln(5)
 
     # Client
     pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 6, "Client", ln=1)
+    pdf.cell(0, 6, "Client", ln=True)
     pdf.set_font("Helvetica", "", 10)
+
     if client:
-        pdf.cell(0, 5, client["nom"], ln=1)
+        pdf.cell(0, 5, _safe(client["nom"]), ln=True)
         if client["adresse"]:
-            pdf.cell(0, 5, client["adresse"], ln=1)
+            pdf.cell(0, 5, _safe(client["adresse"]), ln=True)
         if client["code_postal"] or client["ville"]:
-            pdf.cell(0, 5, f"{client['code_postal'] or ''} {client['ville'] or ''}".strip(), ln=1)
+            pdf.cell(0, 5, _safe(f"{client['code_postal'] or ''} {client['ville'] or ''}".strip()), ln=True)
         if client["telephone"]:
-            pdf.cell(0, 5, f"Tél : {client['telephone']}", ln=1)
+            pdf.cell(0, 5, _safe(f"Tel : {client['telephone']}"), ln=True)
         if client["email"]:
-            pdf.cell(0, 5, client["email"], ln=1)
+            pdf.cell(0, 5, _safe(client["email"]), ln=True)
     else:
-        pdf.cell(0, 5, chantier["client"] or "—", ln=1)
+        pdf.cell(0, 5, _safe(chantier["client"] or "-"), ln=True)
+
     pdf.ln(4)
 
     # Chantier
     pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 6, f"Chantier : {chantier['nom']}", ln=1)
+    pdf.cell(0, 6, _safe(f"Chantier : {chantier['nom']}"), ln=True)
     pdf.ln(3)
 
-    # Tableau pièces
+    tva_rate = totals["tva_rate"]
+
+    # Tableau pieces
     if totals["pieces"]:
         pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(90, 7, "Pièces", border=1)
+        pdf.cell(90, 7, "Pieces", border=1)
         pdf.cell(30, 7, "Prix HT", border=1, align="R")
         pdf.cell(30, 7, "TVA", border=1, align="R")
-        pdf.cell(30, 7, "Prix TTC", border=1, align="R", ln=1)
+        pdf.cell(30, 7, "Prix TTC", border=1, align="R", ln=True)
 
         pdf.set_font("Helvetica", "", 9)
-        tva_rate = totals["tva_rate"]
         for p in totals["pieces"]:
             ht = p["prix_facture"]
             ttc = ht * (1 + tva_rate / 100.0)
             tva = ttc - ht
-            pdf.cell(90, 6, (p["nom"] or "")[:45], border=1)
-            pdf.cell(30, 6, f"{ht:.2f} €", border=1, align="R")
-            pdf.cell(30, 6, f"{tva:.2f} €", border=1, align="R")
-            pdf.cell(30, 6, f"{ttc:.2f} €", border=1, align="R", ln=1)
+            pdf.cell(90, 6, _safe((p["nom"] or "")[:45]), border=1)
+            pdf.cell(30, 6, f"{ht:.2f} EUR", border=1, align="R")
+            pdf.cell(30, 6, f"{tva:.2f} EUR", border=1, align="R")
+            pdf.cell(30, 6, f"{ttc:.2f} EUR", border=1, align="R", ln=True)
         pdf.ln(3)
 
-    # Tableau main d'œuvre
+    # Tableau main d'oeuvre
     if totals["mo"]:
         pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(70, 7, "Main d'œuvre", border=1)
+        pdf.cell(70, 7, "Main d'oeuvre", border=1)
         pdf.cell(25, 7, "Heures", border=1, align="R")
         pdf.cell(25, 7, "Taux", border=1, align="R")
         pdf.cell(30, 7, "Montant HT", border=1, align="R")
-        pdf.cell(30, 7, "Montant TTC", border=1, align="R", ln=1)
+        pdf.cell(30, 7, "Montant TTC", border=1, align="R", ln=True)
 
         pdf.set_font("Helvetica", "", 9)
-        tva_rate = totals["tva_rate"]
         for m in totals["mo"]:
             ht = m["montant"]
             ttc = ht * (1 + tva_rate / 100.0)
-            pdf.cell(70, 6, (m["description"] or "Main d'œuvre")[:35], border=1)
+            pdf.cell(70, 6, _safe((m["description"] or "Main d'oeuvre")[:35]), border=1)
             pdf.cell(25, 6, f"{m['heures']:.2f}", border=1, align="R")
-            pdf.cell(25, 6, f"{m['taux_horaire']:.2f} €", border=1, align="R")
-            pdf.cell(30, 6, f"{ht:.2f} €", border=1, align="R")
-            pdf.cell(30, 6, f"{ttc:.2f} €", border=1, align="R", ln=1)
+            pdf.cell(25, 6, f"{m['taux_horaire']:.2f} EUR", border=1, align="R")
+            pdf.cell(30, 6, f"{ht:.2f} EUR", border=1, align="R")
+            pdf.cell(30, 6, f"{ttc:.2f} EUR", border=1, align="R", ln=True)
         pdf.ln(3)
 
     # Totaux
     pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(120, 7, "Total heures main d'œuvre", border=0)
-    pdf.cell(60, 7, f"{totals['total_heures']:.2f} h", border=0, align="R", ln=1)
+    pdf.cell(120, 7, "Total heures main d'oeuvre", border=0)
+    pdf.cell(60, 7, f"{totals['total_heures']:.2f} h", border=0, align="R", ln=True)
 
     pdf.cell(120, 7, "Total HT", border=0)
-    pdf.cell(60, 7, f"{totals['total_ht']:.2f} €", border=0, align="R", ln=1)
+    pdf.cell(60, 7, f"{totals['total_ht']:.2f} EUR", border=0, align="R", ln=True)
 
     pdf.cell(120, 7, f"TVA ({totals['tva_rate']} %)", border=0)
-    pdf.cell(60, 7, f"{totals['tva_montant']:.2f} €", border=0, align="R", ln=1)
+    pdf.cell(60, 7, f"{totals['tva_montant']:.2f} EUR", border=0, align="R", ln=True)
 
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(120, 9, "TOTAL TTC", border=1)
-    pdf.cell(60, 9, f"{totals['total_ttc']:.2f} €", border=1, align="R", ln=1)
+    pdf.cell(60, 9, f"{totals['total_ttc']:.2f} EUR", border=1, align="R", ln=True)
 
     pdf.ln(10)
     pdf.set_font("Helvetica", "I", 8)
-    pdf.multi_cell(0, 4, "Facture établie en euros. TVA non applicable, art. 293 B du CGI "
-                        "(si micro-entreprise en franchise de TVA) — à adapter selon votre situation.")
+    pdf.multi_cell(
+        0, 4,
+        "Facture etablie en euros. TVA non applicable, art. 293 B du CGI "
+        "(si micro-entreprise en franchise de TVA) - a adapter selon votre situation."
+    )
 
     buffer = BytesIO()
     pdf.output(buffer)
