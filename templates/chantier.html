@@ -78,6 +78,7 @@
 </section>
 
 <section class="two-col">
+  <!-- ========== PIÈCES ========== -->
   <div class="card">
     <h2>Pièces</h2>
     {% if totals.pieces|length == 0 %}
@@ -106,19 +107,37 @@
     {% endif %}
 
     <h3>Ajouter une pièce</h3>
-    <form method="post" action="{{ url_for('piece_ajouter', chantier_id=chantier.id) }}" class="inline-form">
+    <form method="post" action="{{ url_for('piece_ajouter', chantier_id=chantier.id) }}" class="inline-form" id="form-piece">
       <label for="p_nom">Nom de la pièce</label>
       <input type="text" id="p_nom" name="nom" placeholder="Ex : Plaquettes de frein" required>
+
       <label for="p_achat">Prix d'achat (€ HT)</label>
-      <input type="text" id="p_achat" name="prix_achat" placeholder="Ex : 45.00" required>
+      <input type="text" id="p_achat" name="prix_achat" placeholder="Ex : 45.00" required oninput="estimPiece()">
+
       <label for="p_marge">Marge (%) — laisser vide pour utiliser la marge par défaut ({{ settings.marge_defaut_pct }} %)</label>
-      <input type="text" id="p_marge" name="marge_pct" placeholder="Ex : 30">
+      <input type="text" id="p_marge" name="marge_pct" placeholder="Ex : 30" oninput="estimPiece()">
+
       <label for="p_facture">Prix facturé (€ HT) — laisser vide pour calcul automatique</label>
-      <input type="text" id="p_facture" name="prix_facture" placeholder="Calcul automatique si vide">
+      <input type="text" id="p_facture" name="prix_facture" placeholder="Calcul automatique si vide" oninput="estimPiece()">
+
+      <!-- Estimateur pièces -->
+      <div id="estim-piece" class="estim-box" style="display:none; margin: 1rem 0; padding: 0.8rem; background:#f0f7f0; border-radius:6px; border:1px solid #c8e0c8;">
+        <strong>Estimateur net (vente de pièces)</strong>
+        <div style="margin-top:0.4rem; font-size:0.95rem;">
+          Prix facturé HT : <span id="ep-ht">—</span><br>
+          Cotisations URSSAF ({{ settings.cotisation_vente_pct }} %) : <span id="ep-cotis">—</span><br>
+          <strong>Net estimé touché : <span id="ep-net" style="color:#1a7a1a;">—</span></strong>
+        </div>
+        <p class="muted" style="margin:0.4rem 0 0; font-size:0.8rem;">
+          Calcul indicatif hors TVA. Le net = HT − cotisations sociales (régime micro).
+        </p>
+      </div>
+
       <button type="submit" class="btn btn-primary">Ajouter la pièce</button>
     </form>
   </div>
 
+  <!-- ========== MAIN D'ŒUVRE ========== -->
   <div class="card">
     <h2>Main d'œuvre</h2>
     {% if totals.mo|length == 0 %}
@@ -147,39 +166,54 @@
     {% endif %}
 
     <h3>Ajouter de la main d'œuvre</h3>
-    <form method="post" action="{{ url_for('mo_ajouter', chantier_id=chantier.id) }}" class="inline-form">
+    <form method="post" action="{{ url_for('mo_ajouter', chantier_id=chantier.id) }}" class="inline-form" id="form-mo">
       <label for="mo_desc">Description (optionnel)</label>
       <input type="text" id="mo_desc" name="description" placeholder="Ex : Dépose/repose moteur">
+
       <label for="mo_heures">Heures</label>
-      <input type="text" id="mo_heures" name="heures" placeholder="Ex : 2.5" required>
+      <input type="text" id="mo_heures" name="heures" placeholder="Ex : 2.5" required oninput="estimMo()">
 
       <fieldset style="border: none; padding: 0; margin: 1rem 0;">
         <legend style="font-weight: 600; margin-bottom: 0.5rem;">Taux horaire</legend>
         <label style="display: block; margin-bottom: 0.4rem;">
-          <input type="radio" name="mode" value="manuel" checked onchange="toggleTauxMode()">
+          <input type="radio" name="mode" value="manuel" checked onchange="toggleTauxMode(); estimMo()">
           Saisie manuelle
         </label>
         <label style="display: block; margin-bottom: 0.4rem;">
-          <input type="radio" name="mode" value="taux1" onchange="toggleTauxMode()">
+          <input type="radio" name="mode" value="taux1" onchange="toggleTauxMode(); estimMo()">
           Taux 1 — {{ settings.mo_taux_1 | euros }}/h
         </label>
         <label style="display: block; margin-bottom: 0.4rem;">
-          <input type="radio" name="mode" value="taux2" onchange="toggleTauxMode()">
+          <input type="radio" name="mode" value="taux2" onchange="toggleTauxMode(); estimMo()">
           Taux 2 — {{ settings.mo_taux_2 | euros }}/h
         </label>
         <label style="display: block; margin-bottom: 0.4rem;">
-          <input type="radio" name="mode" value="taux3" onchange="toggleTauxMode()">
+          <input type="radio" name="mode" value="taux3" onchange="toggleTauxMode(); estimMo()">
           Taux 3 — {{ settings.mo_taux_3 | euros }}/h
         </label>
       </fieldset>
 
       <div id="taux-manuel-field">
         <label for="mo_taux">Taux horaire (€ HT/h)</label>
-        <input type="text" id="mo_taux" name="taux_horaire" placeholder="Ex : 55">
+        <input type="text" id="mo_taux" name="taux_horaire" placeholder="Ex : 55" oninput="estimMo()">
       </div>
 
       <label for="mo_montant">Montant total (€ HT) — laisser vide pour calcul automatique</label>
-      <input type="text" id="mo_montant" name="montant" placeholder="Calcul automatique si vide">
+      <input type="text" id="mo_montant" name="montant" placeholder="Calcul automatique si vide" oninput="estimMo()">
+
+      <!-- Estimateur main d'œuvre -->
+      <div id="estim-mo" class="estim-box" style="display:none; margin: 1rem 0; padding: 0.8rem; background:#f0f4f8; border-radius:6px; border:1px solid #c8d4e0;">
+        <strong>Estimateur net (services / main d'œuvre)</strong>
+        <div style="margin-top:0.4rem; font-size:0.95rem;">
+          Montant HT : <span id="em-ht">—</span><br>
+          Cotisations URSSAF ({{ settings.cotisation_service_pct }} %) : <span id="em-cotis">—</span><br>
+          <strong>Net estimé touché : <span id="em-net" style="color:#1a5a8a;">—</span></strong>
+        </div>
+        <p class="muted" style="margin:0.4rem 0 0; font-size:0.8rem;">
+          Calcul indicatif hors TVA. Le net = HT − cotisations sociales (régime micro).
+        </p>
+      </div>
+
       <button type="submit" class="btn btn-primary">Ajouter la main d'œuvre</button>
     </form>
   </div>
@@ -192,12 +226,116 @@
   <a class="btn btn-ghost" href="{{ url_for('index') }}">← Retour au tableau de bord</a>
 </section>
 
-<script>
-function toggleTauxMode() {
-  const mode = document.querySelector('input[name="mode"]:checked').value;
-  document.getElementById('taux-manuel-field').style.display = (mode === 'manuel') ? 'block' : 'none';
+<script id="estim-config" type="application/json">
+{
+  "marge_defaut": {{ settings.marge_defaut_pct }},
+  "cotis_vente": {{ settings.cotisation_vente_pct }},
+  "cotis_service": {{ settings.cotisation_service_pct }},
+  "taux1": {{ settings.mo_taux_1 }},
+  "taux2": {{ settings.mo_taux_2 }},
+  "taux3": {{ settings.mo_taux_3 }}
 }
-document.addEventListener('DOMContentLoaded', toggleTauxMode);
+</script>
+
+<script>
+(function () {
+  const CFG = JSON.parse(document.getElementById("estim-config").textContent);
+
+  const MARGE_DEFAUT  = CFG.marge_defaut;
+  const COTIS_VENTE   = CFG.cotis_vente;
+  const COTIS_SERVICE = CFG.cotis_service;
+  const TAUX1         = CFG.taux1;
+  const TAUX2         = CFG.taux2;
+  const TAUX3         = CFG.taux3;
+
+  function parseNum(val) {
+    if (!val || val.trim() === "") return null;
+    const n = parseFloat(val.replace(",", "."));
+    return isNaN(n) ? null : n;
+  }
+
+  function fmt(n) {
+    return n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+  }
+
+  function toggleTauxMode() {
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+    document.getElementById("taux-manuel-field").style.display = (mode === "manuel") ? "block" : "none";
+  }
+
+  function estimPiece() {
+    const achat = parseNum(document.getElementById("p_achat").value);
+    const margeRaw = document.getElementById("p_marge").value;
+    const factureRaw = document.getElementById("p_facture").value;
+
+    let ht = parseNum(factureRaw);
+    if (ht === null && achat !== null) {
+      const marge = parseNum(margeRaw) !== null ? parseNum(margeRaw) : MARGE_DEFAUT;
+      ht = achat * (1 + marge / 100);
+    }
+
+    const box = document.getElementById("estim-piece");
+    if (ht === null || ht <= 0) {
+      box.style.display = "none";
+      return;
+    }
+
+    const cotis = ht * COTIS_VENTE / 100;
+    const net = ht - cotis;
+
+    document.getElementById("ep-ht").textContent = fmt(ht);
+    document.getElementById("ep-cotis").textContent = fmt(cotis);
+    document.getElementById("ep-net").textContent = fmt(net);
+    box.style.display = "block";
+  }
+
+  function estimMo() {
+    const heures = parseNum(document.getElementById("mo_heures").value);
+    const montantRaw = document.getElementById("mo_montant").value;
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+
+    let ht = parseNum(montantRaw);
+
+    if (ht === null && heures !== null) {
+      let taux = 0;
+      if (mode === "manuel") {
+        taux = parseNum(document.getElementById("mo_taux").value) || 0;
+      } else if (mode === "taux1") {
+        taux = TAUX1;
+      } else if (mode === "taux2") {
+        taux = TAUX2;
+      } else if (mode === "taux3") {
+        taux = TAUX3;
+      }
+      ht = heures * taux;
+    }
+
+    const box = document.getElementById("estim-mo");
+    if (ht === null || ht <= 0) {
+      box.style.display = "none";
+      return;
+    }
+
+    const cotis = ht * COTIS_SERVICE / 100;
+    const net = ht - cotis;
+
+    document.getElementById("em-ht").textContent = fmt(ht);
+    document.getElementById("em-cotis").textContent = fmt(cotis);
+    document.getElementById("em-net").textContent = fmt(net);
+    box.style.display = "block";
+  }
+
+  // Exposition globale pour les oninput / onchange du HTML
+  window.toggleTauxMode = toggleTauxMode;
+  window.estimPiece = estimPiece;
+  window.estimMo = estimMo;
+
+  document.addEventListener("DOMContentLoaded", function () {
+    toggleTauxMode();
+    estimPiece();
+    estimMo();
+  });
+})();
 </script>
 
 {% endblock %}
