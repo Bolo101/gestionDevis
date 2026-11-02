@@ -129,7 +129,7 @@
           <strong>Net estimé touché : <span id="ep-net" style="color:#1a7a1a;">—</span></strong>
         </div>
         <p class="muted" style="margin:0.4rem 0 0; font-size:0.8rem;">
-          Calcul indicatif hors TVA. Le net = HT − cotisations sociales (régime micro).
+          Net = prix facturé HT − cotisations − prix d'achat.
         </p>
       </div>
 
@@ -281,13 +281,15 @@
     }
 
     const cotis = ht * COTIS_VENTE / 100;
-    const net = ht - cotis;
+    // Net = prix facturé - cotisations - prix d'achat
+    const coutAchat = achat !== null ? achat : 0;
+    const net = ht - cotis - coutAchat;
 
     document.getElementById("ep-ht").textContent = fmt(ht);
     document.getElementById("ep-cotis").textContent = fmt(cotis);
     document.getElementById("ep-net").textContent = fmt(net);
     box.style.display = "block";
-  }
+  } 
 
   function estimMo() {
     const heures = parseNum(document.getElementById("mo_heures").value);
